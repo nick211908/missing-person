@@ -1,0 +1,12 @@
+opencv-python-headless
+deepface
+tf-keras
+numpy
+scikit-learn
+fastapi
+uvicorn
+bcrypt==4.0.1
+pydantic-settings
+sqlalchemy
+psycopg2-binary
+python-multipart

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.db
+*.log
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Data/Embeddings (Local only)
+backend/data/
+backend/embeddings/
+full_requirements.txt
+
+# Render
+render.yaml
