@@ -122,7 +122,7 @@ const Dashboard = () => {
                   {/* For MVP we assume we have an image URL. If none is returned, show generic */}
                   {person.image_path ? (
                     <img
-                      src={`http://127.0.0.1:8000/images/${person.image_path.split('/').pop()}`}
+                      src={`${API_BASE}/images/${person.image_path.split('/').pop()}`}
                       alt={person.name}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => { e.target.style.display='none'; }}
