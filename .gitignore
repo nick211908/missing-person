@@ -17,5 +17,5 @@ backend/data/
 backend/embeddings/
 full_requirements.txt
 
-# Render
-render.yaml
+# # Render
+# render.yaml
