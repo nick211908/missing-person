@@ -10,3 +10,4 @@ pydantic-settings
 sqlalchemy
 psycopg2-binary
 python-multipart
+boto3
