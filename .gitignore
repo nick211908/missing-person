@@ -17,5 +17,7 @@ backend/data/
 backend/embeddings/
 full_requirements.txt
 
+hackathon.pem
+
 # # Render
 # render.yaml

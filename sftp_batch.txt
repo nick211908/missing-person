@@ -1,0 +1,4 @@
+put frontend/dist/assets/index-DrS1Kkpi.js frontend/dist/assets/index-DrS1Kkpi.js
+put frontend/dist/index.html frontend/dist/index.html
+put frontend/dist/favicon.svg frontend/dist/favicon.svg
+put frontend/dist/icons.svg frontend/dist/icons.svg
