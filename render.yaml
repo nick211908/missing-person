@@ -19,11 +19,11 @@ services:
     name: face-detection-frontend
     env: static
     buildCommand: npm install && npm run build
-    publishDir: ./frontend/dist
-    staticPublishCustomHeaders:
-      - values:
-          - key: Cache-Control
-            value: public, max-age=31536000, immutable
+    staticPublishPath: ./frontend/dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     envVars:
       - key: VITE_API_URL
         fromService:
