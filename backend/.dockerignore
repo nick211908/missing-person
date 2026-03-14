@@ -2,9 +2,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 .env
 missing_persons.db
 data/
 embeddings/
 uvicorn_log.txt
 *.pkl
+*.h5
+*.pt
+*.onnx
+.deepface/
+.DS_Store
+.idea/
+.vscode/
