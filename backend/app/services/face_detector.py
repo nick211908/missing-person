@@ -1,7 +1,7 @@
-import cv2
-import numpy as np
-from deepface import DeepFace
-from app.config import settings
+import cv2  # type: ignore
+import numpy as np  # type: ignore
+from deepface import DeepFace  # type: ignore
+from app.config import settings  # type: ignore
 
 class FaceResult:
     def __init__(self, bbox, embedding, confidence=None):

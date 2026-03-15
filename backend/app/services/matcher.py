@@ -1,8 +1,8 @@
-import numpy as np
+import numpy as np  # type: ignore
 import pickle
 import os
-from sklearn.metrics.pairwise import cosine_similarity
-from app.config import settings
+from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
+from app.config import settings  # type: ignore
 
 class Matcher:
     def __init__(self):
@@ -108,7 +108,7 @@ class Matcher:
 
         return float(np.std(sims)) if sims else 1.0
 
-    def match(self, query_embedding: np.ndarray, custom_threshold: float = None):
+    def match(self, query_embedding: np.ndarray, custom_threshold: float | None = None):
         """
         Match a query embedding against all stored embeddings.
         Returns (best_person_id, max_similarity_score) or (None, 0.0)
@@ -130,19 +130,19 @@ class Matcher:
             person_max_sim = 0.0
             for emb in emb_list:
                 sim = cosine_similarity(query, emb)[0][0]
-                if sim > person_max_sim:
+                if sim > person_max_sim:  # type: ignore
                     person_max_sim = sim
 
-            if person_max_sim > max_sim:
+            if person_max_sim > max_sim:  # type: ignore
                 max_sim = person_max_sim
                 best_match_id = person_id
 
-        if max_sim > threshold:
+        if float(max_sim) > float(threshold):  # type: ignore
             return best_match_id, max_sim
 
         return None, max_sim
 
-    def match_knn(self, query_embedding: np.ndarray, k: int = 3, custom_threshold: float = None):
+    def match_knn(self, query_embedding: np.ndarray, k: int = 3, custom_threshold: float | None = None):
         """
         K-nearest neighbors matching with voting.
         More robust for persons with multiple embeddings.
@@ -180,17 +180,17 @@ class Matcher:
         similarities.sort(key=lambda x: x[1], reverse=True)
 
         # Take top k
-        top_k = similarities[:k]
+        top_k = similarities[:k]  # type: ignore
 
         # Vote by person_id
-        vote_count = {}
-        vote_score = {}
+        vote_count: dict = {}
+        vote_score: dict = {}
         for person_id, sim in top_k:
             if person_id not in vote_count:
                 vote_count[person_id] = 0
                 vote_score[person_id] = 0.0
-            vote_count[person_id] += 1
-            vote_score[person_id] += sim
+            vote_count[person_id] = float(vote_count.get(person_id, 0)) + 1  # type: ignore
+            vote_score[person_id] = float(vote_score.get(person_id, 0.0)) + float(sim)  # type: ignore
 
         # Find winner by vote count, then by average similarity
         best_person_id = None
@@ -199,13 +199,13 @@ class Matcher:
 
         for person_id, count in vote_count.items():
             avg_sim = vote_score[person_id] / count
-            if count > best_vote_count or (count == best_vote_count and avg_sim > best_avg_sim):
+            if count > best_vote_count or (count == best_vote_count and avg_sim > best_avg_sim):  # type: ignore
                 best_person_id = person_id
                 best_vote_count = count
                 best_avg_sim = avg_sim
 
         # Use average similarity of winning person's top matches
-        if best_person_id is not None and best_avg_sim > threshold:
+        if best_person_id is not None and float(best_avg_sim) > float(threshold):  # type: ignore
             return best_person_id, best_avg_sim
 
         return None, best_avg_sim
@@ -213,7 +213,7 @@ class Matcher:
     def remove_person(self, person_id: int):
         """Remove all embeddings for a person from the fast search DB."""
         if person_id in self.embeddings:
-            del self.embeddings[person_id]
+            self.embeddings.pop(person_id, None)
             self.save_db()
 
 matcher = Matcher()

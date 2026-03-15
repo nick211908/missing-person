@@ -1,8 +1,9 @@
-import cv2
+import cv2  # type: ignore
+import numpy as np  # type: ignore
 import threading
-from app.services.face_detector import detect_faces
-from app.services.matcher import matcher
-from app.database.db import SessionLocal, DetectionEvent
+from app.services.face_detector import detect_faces  # type: ignore
+from app.services.matcher import matcher  # type: ignore
+from app.database.db import SessionLocal, DetectionEvent, MissingPerson  # type: ignore
 import os
 import uuid
 
@@ -21,8 +22,8 @@ class StreamProcessor:
 
     def _process_stream(self, camera_url: str, camera_id: str):
         # Allow passing an integer for local webcam via URL
-        if camera_url.isdigit():
-            camera_url = int(camera_url)
+        if str(camera_url).isdigit():
+            camera_url = str(int(camera_url))
             
         cap = cv2.VideoCapture(camera_url)
         frame_count = 0
@@ -30,7 +31,7 @@ class StreamProcessor:
 
         os.makedirs("data/snapshots", exist_ok=True)
 
-        import supervision as sv
+        import supervision as sv  # type: ignore
         tracker = sv.ByteTrack()
         tracklet_history = {} # track_id -> {'person_id': ..., 'scores': []}
         
@@ -74,15 +75,15 @@ class StreamProcessor:
                     if track_id not in tracklet_history:
                         tracklet_history[track_id] = {'person_id': best_match_id, 'scores': []}
                         
-                    if tracklet_history[track_id]['person_id'] != best_match_id:
-                        tracklet_history[track_id] = {'person_id': best_match_id, 'scores': [sim_score]}
+                    if tracklet_history.get(track_id, {}).get('person_id') != best_match_id:  # type: ignore
+                        tracklet_history[track_id] = {'person_id': best_match_id, 'scores': [sim_score]}  # type: ignore
                     else:
-                        tracklet_history[track_id]['scores'].append(sim_score)
+                        tracklet_history.get(track_id, {}).get('scores', []).append(sim_score)  # type: ignore
                         
-                    avg_score = sum(tracklet_history[track_id]['scores']) / len(tracklet_history[track_id]['scores'])
+                    avg_score = sum(tracklet_history.get(track_id, {}).get('scores', [])) / len(tracklet_history.get(track_id, {}).get('scores', []))  # type: ignore
                     
                     # Require at least 2 consecutive positive evaluations over a tracklet to trigger alert
-                    if avg_score >= threshold and len(tracklet_history[track_id]['scores']) >= 2:
+                    if avg_score >= threshold and len(tracklet_history.get(track_id, {}).get('scores', [])) >= 2:  # type: ignore
                         snapshot_filename = f"data/snapshots/{uuid.uuid4().hex}.jpg"
                         
                         # Draw bbox
@@ -102,12 +103,13 @@ class StreamProcessor:
                         print(f"ALERT! Person {best_match_id} detected on camera {camera_id} with avg similarity {avg_score:.2f}")
                         
                         # Reset scores to prevent immediate duplicate alerts for same track
-                        tracklet_history[track_id]['scores'] = []
+                        if track_id in tracklet_history:
+                            tracklet_history[track_id]['scores'] = []  # type: ignore
 
             db.close()
             
         cap.release()
         if camera_id in self.active_streams:
-            del self.active_streams[camera_id]
+            self.active_streams.pop(camera_id, None)
 
 stream_processor = StreamProcessor()
