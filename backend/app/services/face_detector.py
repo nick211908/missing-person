@@ -1,52 +1,64 @@
 import cv2
 import numpy as np
 from deepface import DeepFace
+from app.config import settings
 
 class FaceResult:
-    def __init__(self, bbox, embedding):
-        self.bbox = bbox # [x, y, x+w, y+h]
+    def __init__(self, bbox, embedding, confidence=None):
+        self.bbox = bbox  # [x, y, x+w, y+h]
         self.embedding = embedding
+        self.confidence = confidence  # Face detection confidence
 
-def detect_faces(img: np.ndarray, get_embedding=True):
+def detect_faces(img: np.ndarray, get_embedding=True, model_name=None, detector_backend=None):
     """
     Detect faces in an image using DeepFace.
     Returns a list of FaceResult objects (contains bbox and embedding).
+
+    Args:
+        img: BGR image (numpy array)
+        get_embedding: Whether to extract embeddings
+        model_name: Override model from settings (optional)
+        detector_backend: Override detector from settings (optional)
+
+    Returns:
+        List of FaceResult objects
     """
     try:
-        # DeepFace extract_faces returns a list of dictionaries.
-        # Enforce exactly one detection run if we only need bbox, but to be safe and fast
-        # we can just use the 'represent' function directly which does detection + embedding.
-        
+        # Use configured model and detector unless overridden
+        model = model_name if model_name else settings.FACE_MODEL
+        detector = detector_backend if detector_backend else settings.DETECTOR_BACKEND
+
         results = []
         if get_embedding:
-            # Use ArcFace (512-dim) natively supported by DeepFace, 
-            # with opencv backend for face detection
+            # Use configured model for embedding extraction
             reps = DeepFace.represent(
                 img_path=img,
-                model_name="ArcFace",
-                detector_backend="retinaface",
+                model_name=model,
+                detector_backend=detector,
                 enforce_detection=False
             )
-            
+
             for rep in reps:
-                if rep.get("face_confidence", 0) > 0:
+                confidence = rep.get("face_confidence", 0)
+                if confidence > 0:
                     area = rep["facial_area"]
                     bbox = np.array([area["x"], area["y"], area["x"] + area["w"], area["y"] + area["h"]])
                     embedding = np.array(rep["embedding"])
-                    results.append(FaceResult(bbox=bbox, embedding=embedding))
+                    results.append(FaceResult(bbox=bbox, embedding=embedding, confidence=confidence))
         else:
             # Just face extraction
             faces = DeepFace.extract_faces(
                 img_path=img,
-                detector_backend="retinaface",
+                detector_backend=detector,
                 enforce_detection=False
             )
             for face in faces:
-                if face.get("confidence", 0) > 0:
+                confidence = face.get("confidence", 0)
+                if confidence > 0:
                     area = face["facial_area"]
                     bbox = np.array([area["x"], area["y"], area["x"] + area["w"], area["y"] + area["h"]])
-                    results.append(FaceResult(bbox=bbox, embedding=None))
-                    
+                    results.append(FaceResult(bbox=bbox, embedding=None, confidence=confidence))
+
         return results
     except Exception as e:
         print(f"DeepFace processing error: {e}")

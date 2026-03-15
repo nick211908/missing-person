@@ -1,5 +1,5 @@
 opencv-python-headless
-deepface[tensorflow-cpu]
+deepface
 numpy<2.0
 scikit-learn
 fastapi
@@ -12,3 +12,6 @@ python-multipart
 boto3
 python-jose[cryptography]
 python-dotenv
+supervision
+albumentations
+passlib[bcrypt]

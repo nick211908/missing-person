@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session
-from app.database.db import get_db, DetectionEvent, MissingPerson
-from app.database.schemas import DetectionEventResponse
-from app.services.face_detector import detect_faces
-from app.services.matcher import matcher
-from app.services.preprocessor import preprocess_frame
-from app.auth.auth import get_current_user
-from app.models.user import User
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File  # type: ignore
+from sqlalchemy.orm import Session  # type: ignore
+from app.database.db import get_db, DetectionEvent, MissingPerson  # type: ignore
+from app.database.schemas import DetectionEventResponse  # type: ignore
+from app.services.face_detector import detect_faces  # type: ignore
+from app.services.matcher import matcher  # type: ignore
+from app.services.preprocessor import preprocess_frame  # type: ignore
+from app.auth.auth import get_current_user  # type: ignore
+from app.models.user import User  # type: ignore
+from pydantic import BaseModel  # type: ignore
 from typing import Optional
-import cv2
-import numpy as np
+import cv2  # type: ignore
+import numpy as np  # type: ignore
 import base64
 import tempfile
 import os
@@ -27,8 +27,21 @@ def get_detections(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)  # 🔒 Auth required
 ):
-    events = db.query(DetectionEvent).order_by(DetectionEvent.timestamp.desc()).limit(100).all()
-    return events
+    events_with_names = (
+        db.query(DetectionEvent, MissingPerson.name.label("person_name"))
+        .outerjoin(MissingPerson, DetectionEvent.person_id == MissingPerson.person_id)
+        .order_by(DetectionEvent.timestamp.desc())
+        .limit(100)
+        .all()
+    )
+    
+    result = []
+    for evt, p_name in events_with_names:
+        evt_dict = evt.__dict__.copy()
+        evt_dict["person_name"] = p_name
+        result.append(evt_dict)
+        
+    return result
 
 @router.post("/process-frame")
 async def process_frame(
@@ -75,7 +88,7 @@ async def process_frame(
             }
             results.append(result)
 
-            if best_match_id and sim_score >= threshold:
+            if best_match_id and float(sim_score) >= float(threshold):
                 alerts.append({
                     "person_id": best_match_id,
                     "confidence": float(sim_score),
@@ -119,14 +132,14 @@ async def process_video(
         if not cap.isOpened():
             raise HTTPException(status_code=400, detail="Could not open video file.")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 25
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration_sec = total_frames / fps if fps > 0 else 0
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 25)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        duration_sec = float(total_frames) / fps if fps > 0 else 0.0
 
-        frame_results = []
-        all_alerts = []
-        frame_count = 0
-        processed_count = 0
+        frame_results: list = []
+        all_alerts: list = []
+        frame_count: int = 0
+        processed_count: int = 0
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -143,40 +156,51 @@ async def process_video(
             # ──────────────────────────────────────────────────────────────────
 
             faces = detect_faces(processed_frame)
-            processed_count += 1
-            timestamp_sec = round(frame_count / fps, 2)
+            processed_count += 1  # type: ignore
+            timestamp_sec = round(float(frame_count) / fps, 2)  # type: ignore
 
             frame_detections = []
-            for face in faces:
-                if face.embedding is None:
-                    continue
+            
+            if len(faces) > 0:
+                for i, face in enumerate(faces):
+                    if face.embedding is None:
+                        continue
 
-                best_match_id, sim_score = matcher.match(face.embedding)
+                    best_match_id, sim_score = matcher.match(face.embedding)
 
-                threshold = 0.55
-                if best_match_id:
-                    person = db.query(MissingPerson).filter(
-                        MissingPerson.person_id == best_match_id
-                    ).first()
-                    if person and person.match_threshold:
-                        threshold = person.match_threshold
+                    threshold = 0.55
+                    if best_match_id:
+                        person = db.query(MissingPerson).filter(
+                            MissingPerson.person_id == best_match_id
+                        ).first()
+                        if person and person.match_threshold:
+                            threshold = person.match_threshold
 
-                detection = {
-                    "bbox": face.bbox.astype(int).tolist(),
-                    "best_match_id": best_match_id,
-                    "similarity_score": float(sim_score) if best_match_id else 0.0,
-                    "threshold_used": threshold,
-                    "is_match": bool(best_match_id and sim_score >= threshold),
-                }
-                frame_detections.append(detection)
+                    if best_match_id is not None and sim_score >= threshold:
+                        is_match = True
+                        avg_score = sim_score
+                    else:
+                        is_match = False
+                        avg_score = 0.0
 
-                if best_match_id and sim_score >= threshold:
-                    all_alerts.append({
-                        "person_id": best_match_id,
-                        "confidence": float(sim_score),
-                        "camera_id": camera_id,
-                        "timestamp_sec": timestamp_sec,
-                    })
+                    detection = {
+                        "bbox": face.bbox.astype(int).tolist(),
+                        "best_match_id": best_match_id,
+                        "similarity_score": float(avg_score) if best_match_id else 0.0,
+                        "threshold_used": threshold,
+                        "is_match": is_match,
+                        "track_id": i  # fallback track_id since tracker is removed
+                    }
+                    frame_detections.append(detection)
+
+                    if is_match:
+                        all_alerts.append({
+                            "person_id": best_match_id,
+                            "confidence": float(avg_score),
+                            "camera_id": camera_id,
+                            "timestamp_sec": timestamp_sec,
+                            "track_id": i
+                        })
 
             if frame_detections:
                 frame_results.append({

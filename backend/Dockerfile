@@ -1,5 +1,5 @@
 # ── Base image ────────────────────────────────────────────────────────────────
-FROM python:3.10-slim
+FROM tensorflow/tensorflow:2.15.0-cpu
 
 # Environment – unbuffered output + no .pyc clutter + no pip cache
 ENV PYTHONDONTWRITEBYTECODE=1 \

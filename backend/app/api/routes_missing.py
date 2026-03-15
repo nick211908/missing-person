@@ -1,18 +1,19 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException  # type: ignore
+from sqlalchemy.orm import Session  # type: ignore
 from typing import List, Optional
-from app.database.db import get_db, MissingPerson, PersonImage
-from app.database.schemas import MissingPersonResponse
-from app.services.face_detector import detect_faces
-from app.services.matcher import matcher
-from app.auth.auth import get_current_user, require_admin
-from app.models.user import User
-from app.config import settings
+from app.database.db import get_db, MissingPerson, PersonImage  # type: ignore
+from app.database.schemas import MissingPersonResponse  # type: ignore
+from app.services.face_detector import detect_faces  # type: ignore
+from app.services.matcher import matcher  # type: ignore
+from app.services.quality_assessment import assess_face_quality  # type: ignore
+from app.auth.auth import get_current_user, require_admin  # type: ignore
+from app.models.user import User  # type: ignore
+from app.config import settings  # type: ignore
 import shutil
 import uuid
 import os
-import cv2
-import numpy as np
+import cv2  # type: ignore
+import numpy as np  # type: ignore
 
 router = APIRouter()
 
@@ -75,6 +76,7 @@ async def upload_missing_person(
         if img is None:
             continue  # Skip invalid images
 
+        # Process only the original uploaded image to speed up registration
         faces = detect_faces(img)
         if not faces:
             continue  # Skip images with no faces
@@ -85,16 +87,38 @@ async def upload_missing_person(
 
         largest_face = max(faces, key=face_area)
 
+        # Quality assessment
+        quality_result = None
+        bbox = largest_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
+        face_roi = img[y1:y2, x1:x2]
+        
+        if settings.QUALITY_FILTER_ENABLED:
+            quality_result = assess_face_quality(
+                face_roi,
+                blur_threshold=settings.BLUR_THRESHOLD,
+                max_yaw=settings.MAX_YAW_ANGLE,
+                max_pitch=settings.MAX_PITCH_ANGLE,
+                detector_backend=settings.DETECTOR_BACKEND
+            )
+            if not quality_result.accepted:
+                print(f"Skipping low-quality face: {quality_result.rejection_reason}")
+                continue
+
         if largest_face.embedding is not None:
             # Add embedding to matcher
             matcher.add_person_embedding(new_person.person_id, largest_face.embedding)
             embeddings.append(largest_face.embedding)
 
-            # Create PersonImage record - store just the filename, not full path
+            # Create PersonImage record
             person_image = PersonImage(
                 person_id=new_person.person_id,
-                image_path=filename,  # Just the filename, not the full path
-                embedding_index=len(embeddings) - 1
+                image_path=filename,
+                embedding_index=len(embeddings) - 1,
+                blur_score=quality_result.blur_score if quality_result else None,
+                yaw_angle=quality_result.yaw if quality_result else None,
+                pitch_angle=quality_result.pitch if quality_result else None,
+                quality_score=quality_result.quality_score if quality_result else None
             )
             db.add(person_image)
             saved_images.append(person_image)
@@ -111,8 +135,16 @@ async def upload_missing_person(
     # Compute per-person threshold based on self-similarity
     if len(embeddings) >= 2:
         mean_self_sim = matcher.compute_self_similarity(new_person.person_id)
-        # Set threshold slightly below mean self-similarity
-        calibrated_threshold = max(0.4, mean_self_sim - 0.05)
+        std_self_sim = matcher.compute_self_similarity_std(new_person.person_id)
+
+        # Set threshold slightly below mean self-similarity with clamps
+        calibrated_threshold = mean_self_sim - 0.05
+        calibrated_threshold = max(settings.THRESHOLD_MIN, min(calibrated_threshold, settings.THRESHOLD_MAX))
+
+        # Fallback for nearly identical embeddings (low variance)
+        if std_self_sim < 0.05:
+            calibrated_threshold = settings.THRESHOLD_LOW_VARIANCE_DEFAULT
+
         new_person.match_threshold = calibrated_threshold
 
     db.commit()

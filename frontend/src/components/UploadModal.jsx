@@ -70,7 +70,8 @@ const UploadModal = ({ isOpen, onClose, onSuccess }) => {
             addr.country
           ].filter(Boolean);
           setLocation(parts.join(', ') || data.display_name);
-        } catch {
+        } catch (err) {
+          console.warn("Geocoding failed, falling back to coordinates:", err);
           setLocation(`${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`);
         } finally {
           setLocationLoading(false);
@@ -79,7 +80,7 @@ const UploadModal = ({ isOpen, onClose, onSuccess }) => {
       (err) => {
         setLocationLoading(false);
         setLocationError(
-          err.code === 1 ? 'Location access denied. Please allow in browser settings.'
+          err.code === err.PERMISSION_DENIED ? 'Location access denied. Please allow in browser settings.'
           : 'Unable to determine location. Try again.'
         );
       },

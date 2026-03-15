@@ -29,6 +29,12 @@ class PersonImage(Base):
     embedding_index = Column(Integer, default=0)  # Index in the matcher embeddings list
     date_added = Column(DateTime, default=datetime.utcnow)
 
+    # Quality metadata
+    blur_score = Column(Float, nullable=True)
+    yaw_angle = Column(Float, nullable=True)
+    pitch_angle = Column(Float, nullable=True)
+    quality_score = Column(Float, nullable=True)
+
     person = relationship("MissingPerson", back_populates="images")
 
 class DetectionEvent(Base):
