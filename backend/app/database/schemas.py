@@ -52,3 +52,66 @@ class DetectionEventResponse(BaseModel):
 class StreamStartRequest(BaseModel):
     camera_url: str
     camera_id: str
+
+
+class PhoneCameraSession(BaseModel):
+    """Schema for active phone camera sessions."""
+    session_id: str
+    camera_id: str
+    device_info: Optional[str] = None
+    connected_at: datetime
+    last_frame_at: Optional[datetime] = None
+    status: str  # "connected", "streaming", "disconnected", "error"
+    frames_processed: int = 0
+    faces_detected: int = 0
+    matches_found: int = 0
+    ip_address: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PhoneCameraScanRequest(BaseModel):
+    """Request to initiate a phone camera scan."""
+    camera_id: str
+    device_name: Optional[str] = None
+    location: Optional[str] = None
+    scan_mode: str = "realtime"  # "realtime" or "snapshot"
+
+
+class PhoneCameraScanResponse(BaseModel):
+    """Response for scan initiation."""
+    session_id: str
+    camera_id: str
+    websocket_url: str
+    status: str
+    message: str
+
+
+class PhoneCameraFrameRequest(BaseModel):
+    """Request for processing a single frame from phone camera."""
+    frame: str  # base64 encoded image
+    camera_id: str
+    timestamp: Optional[datetime] = None
+    location: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class PhoneCameraDetectionResult(BaseModel):
+    """Result of face detection from phone camera."""
+    bbox: List[int]
+    best_match_id: Optional[int] = None
+    similarity_score: float
+    threshold_used: float
+    is_match: bool
+    person_name: Optional[str] = None
+
+
+class PhoneCameraFrameResponse(BaseModel):
+    """Response after processing a phone camera frame."""
+    status: str
+    face_count: int
+    detections: List[PhoneCameraDetectionResult]
+    alerts: List[dict]
+    timestamp: float
+    processing_time_ms: Optional[float] = None

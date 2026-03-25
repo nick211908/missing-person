@@ -9,6 +9,7 @@ const LiveStream = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const bestAccuracies = useRef({}); // Track highest confidence per person_id
 
   // Simulated WebCam Hookup for MVP demo
   useEffect(() => {
@@ -72,7 +73,15 @@ const LiveStream = () => {
       const data = await res.json();
       
       if (res.ok && data.alerts && data.alerts.length > 0) {
-        addLog(`ALERT! Missing person(s) detected.`, "alert", data.alerts);
+        // Track the absolute best frame accuracy across time for each person
+        const processedAlerts = data.alerts.map(alert => {
+          const currentBest = bestAccuracies.current[alert.person_id] || 0;
+          const bestScore = Math.max(currentBest, alert.confidence);
+          bestAccuracies.current[alert.person_id] = bestScore;
+          return { ...alert, confidence: bestScore };
+        });
+        
+        addLog(`ALERT! Missing person(s) detected.`, "alert", processedAlerts);
       } else if (res.ok) {
         addLog("Frame processed: No matches found.", "success");
       } else {
@@ -198,7 +207,7 @@ const LiveStream = () => {
                       <div key={i} style={{ background: 'rgba(0,0,0,0.4)', padding: '0.5rem', borderRadius: '8px', fontSize: '0.875rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: 'var(--accent-primary)' }}>Matched Person {alert.person_id}</span>
-                          <span style={{ color: 'var(--danger)' }}>{(alert.confidence * 100).toFixed(1)}% Match</span>
+                          <span style={{ color: 'var(--danger)' }}>{(alert.confidence * 100).toFixed(1)}% Max Match</span>
                         </div>
                       </div>
                     ))}

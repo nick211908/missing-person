@@ -1,4 +1,4 @@
-import { Camera, LayoutDashboard, ShieldAlert, LogOut, Shield, User, Film } from 'lucide-react';
+import { Camera, LayoutDashboard, ShieldAlert, LogOut, Shield, User, Film, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,6 +8,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'dashboard', label: 'Database', icon: <LayoutDashboard size={18} /> },
     { id: 'livestream', label: 'Live CCTV', icon: <Camera size={18} /> },
+    { id: 'phonecamera', label: 'Phone Camera', icon: <Smartphone size={18} /> },
     { id: 'videoanalysis', label: 'Video Analysis', icon: <Film size={18} /> },
   ];
 

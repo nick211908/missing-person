@@ -4,7 +4,9 @@ from app.database.db import get_db, DetectionEvent, MissingPerson  # type: ignor
 from app.database.schemas import DetectionEventResponse  # type: ignore
 from app.services.face_detector import detect_faces  # type: ignore
 from app.services.matcher import matcher  # type: ignore
-from app.services.preprocessor import preprocess_frame  # type: ignore
+from app.services.preprocessor import preprocess_frame, preprocess_face_roi  # type: ignore
+from app.services.quality_assessment import assess_face_quality  # type: ignore
+from app.config import settings  # type: ignore
 from app.auth.auth import get_current_user  # type: ignore
 from app.models.user import User  # type: ignore
 from pydantic import BaseModel  # type: ignore
@@ -70,25 +72,28 @@ async def process_frame(
     
     for face in faces:
         if face.embedding is not None:
-            # First match to find best candidate
+            # Match using KNN (enabled in settings) for robust matching
             best_match_id, sim_score = matcher.match(face.embedding)
 
-            # Get per-person threshold if available
-            threshold = 0.55  # Default threshold
+            # Get per-person threshold if available, otherwise use default
+            threshold = settings.THRESHOLD_LOW_VARIANCE_DEFAULT
             if best_match_id:
                 person = db.query(MissingPerson).filter(MissingPerson.person_id == best_match_id).first()
                 if person and person.match_threshold:
                     threshold = person.match_threshold
 
+            is_match = best_match_id is not None and float(sim_score) >= float(threshold)
+
             result = {
                 "bbox": face.bbox.astype(int).tolist(),
                 "best_match_id": best_match_id,
                 "similarity_score": float(sim_score) if best_match_id else 0.0,
-                "threshold_used": threshold
+                "threshold_used": threshold,
+                "is_match": is_match
             }
             results.append(result)
 
-            if best_match_id and float(sim_score) >= float(threshold):
+            if is_match:
                 alerts.append({
                     "person_id": best_match_id,
                     "confidence": float(sim_score),
@@ -166,9 +171,11 @@ async def process_video(
                     if face.embedding is None:
                         continue
 
+                    # Use KNN matching for robust results
                     best_match_id, sim_score = matcher.match(face.embedding)
 
-                    threshold = 0.55
+                    # Get per-person threshold
+                    threshold = settings.THRESHOLD_LOW_VARIANCE_DEFAULT
                     if best_match_id:
                         person = db.query(MissingPerson).filter(
                             MissingPerson.person_id == best_match_id
@@ -176,27 +183,22 @@ async def process_video(
                         if person and person.match_threshold:
                             threshold = person.match_threshold
 
-                    if best_match_id is not None and sim_score >= threshold:
-                        is_match = True
-                        avg_score = sim_score
-                    else:
-                        is_match = False
-                        avg_score = 0.0
+                    is_match = best_match_id is not None and sim_score >= threshold
 
                     detection = {
                         "bbox": face.bbox.astype(int).tolist(),
                         "best_match_id": best_match_id,
-                        "similarity_score": float(avg_score) if best_match_id else 0.0,
+                        "similarity_score": float(sim_score) if best_match_id else 0.0,
                         "threshold_used": threshold,
                         "is_match": is_match,
-                        "track_id": i  # fallback track_id since tracker is removed
+                        "track_id": i
                     }
                     frame_detections.append(detection)
 
                     if is_match:
                         all_alerts.append({
                             "person_id": best_match_id,
-                            "confidence": float(avg_score),
+                            "confidence": float(sim_score),
                             "camera_id": camera_id,
                             "timestamp_sec": timestamp_sec,
                             "track_id": i

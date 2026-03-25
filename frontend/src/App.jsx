@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import LiveStream from './components/LiveStream';
+import PhoneCamera from './components/PhoneCamera';
 import VideoAnalysis from './components/VideoAnalysis';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -43,6 +44,8 @@ function AppInner() {
             <Dashboard key="dashboard" />
           ) : activeTab === 'livestream' ? (
             <LiveStream key="livestream" />
+          ) : activeTab === 'phonecamera' ? (
+            <PhoneCamera key="phonecamera" />
           ) : (
             <VideoAnalysis key="videoanalysis" />
           )}

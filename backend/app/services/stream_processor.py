@@ -3,6 +3,9 @@ import numpy as np  # type: ignore
 import threading
 from app.services.face_detector import detect_faces  # type: ignore
 from app.services.matcher import matcher  # type: ignore
+from app.services.quality_assessment import assess_face_quality  # type: ignore
+from app.services.preprocessor import preprocess_face_roi  # type: ignore
+from app.config import settings  # type: ignore
 from app.database.db import SessionLocal, DetectionEvent, MissingPerson  # type: ignore
 import os
 import uuid
@@ -64,6 +67,7 @@ class StreamProcessor:
                 if face.embedding is None:
                     continue
                     
+                # Get the absolute best possible match from the database (settings-aware)
                 best_match_id, sim_score = matcher.match(face.embedding)
                 
                 if best_match_id is not None:
@@ -80,27 +84,28 @@ class StreamProcessor:
                     else:
                         tracklet_history.get(track_id, {}).get('scores', []).append(sim_score)  # type: ignore
                         
-                    avg_score = sum(tracklet_history.get(track_id, {}).get('scores', [])) / len(tracklet_history.get(track_id, {}).get('scores', []))  # type: ignore
+                    # Calculate best accuracy historically observed during this tracked motion
+                    best_score = float(max(tracklet_history.get(track_id, {}).get('scores', [0.0])))  # type: ignore
                     
                     # Require at least 2 consecutive positive evaluations over a tracklet to trigger alert
-                    if avg_score >= threshold and len(tracklet_history.get(track_id, {}).get('scores', [])) >= 2:  # type: ignore
+                    if best_score >= threshold and len(tracklet_history.get(track_id, {}).get('scores', [])) >= 2:  # type: ignore
                         snapshot_filename = f"data/snapshots/{uuid.uuid4().hex}.jpg"
                         
                         # Draw bbox
                         bbox = face.bbox.astype(int)
                         cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
-                        cv2.putText(frame, f"ID: {track_id} Match: {avg_score:.2f}", (bbox[0], bbox[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                        cv2.putText(frame, f"ID: {track_id} Match: {best_score:.2f}", (bbox[0], bbox[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
                         cv2.imwrite(snapshot_filename, frame)
                         
                         event = DetectionEvent(
                             person_id=best_match_id,
                             camera_id=camera_id,
-                            similarity_score=float(avg_score),
+                            similarity_score=float(best_score),
                             snapshot_path=snapshot_filename
                         )
                         db.add(event)
                         db.commit()
-                        print(f"ALERT! Person {best_match_id} detected on camera {camera_id} with avg similarity {avg_score:.2f}")
+                        print(f"ALERT! Person {best_match_id} detected on camera {camera_id} with HIGH similarity {best_score:.2f}")
                         
                         # Reset scores to prevent immediate duplicate alerts for same track
                         if track_id in tracklet_history:

@@ -6,6 +6,7 @@ from app.database.schemas import MissingPersonResponse  # type: ignore
 from app.services.face_detector import detect_faces  # type: ignore
 from app.services.matcher import matcher  # type: ignore
 from app.services.quality_assessment import assess_face_quality  # type: ignore
+from app.services.augmentor import augment_image  # type: ignore
 from app.auth.auth import get_current_user, require_admin  # type: ignore
 from app.models.user import User  # type: ignore
 from app.config import settings  # type: ignore
@@ -106,11 +107,11 @@ async def upload_missing_person(
                 continue
 
         if largest_face.embedding is not None:
-            # Add embedding to matcher
+            # Add original embedding to matcher
             matcher.add_person_embedding(new_person.person_id, largest_face.embedding)
             embeddings.append(largest_face.embedding)
 
-            # Create PersonImage record
+            # Create PersonImage record for original
             person_image = PersonImage(
                 person_id=new_person.person_id,
                 image_path=filename,
@@ -122,6 +123,23 @@ async def upload_missing_person(
             )
             db.add(person_image)
             saved_images.append(person_image)
+
+            # Generate augmented embeddings for robustness
+            if settings.AUGMENTATION_ENABLED and settings.AUGMENTATION_MAX_VARIATIONS > 0:
+                # Preprocess face ROI for better augmentation
+                face_roi_preprocessed = img[y1:y2, x1:x2].copy()
+                augmented_variations = augment_image(face_roi_preprocessed, include_flip=False)
+
+                aug_count = 0
+                for aug_img in augmented_variations[1:]:  # Skip original (already added)
+                    # Detect face in augmented image and get embedding
+                    aug_faces = detect_faces(aug_img)
+                    if aug_faces and aug_faces[0].embedding is not None:
+                        matcher.add_person_embedding(new_person.person_id, aug_faces[0].embedding)
+                        embeddings.append(aug_faces[0].embedding)
+                        aug_count += 1
+
+                print(f"Added {aug_count} augmented embeddings for person {new_person.person_id}")
 
     if not embeddings:
         # Rollback - no valid faces found
@@ -137,15 +155,22 @@ async def upload_missing_person(
         mean_self_sim = matcher.compute_self_similarity(new_person.person_id)
         std_self_sim = matcher.compute_self_similarity_std(new_person.person_id)
 
-        # Set threshold slightly below mean self-similarity with clamps
-        calibrated_threshold = mean_self_sim - 0.05
+        # Set threshold below mean self-similarity with adaptive margin
+        # Larger margin for high variance (less consistent embeddings)
+        adaptive_margin = 0.05 + (std_self_sim * 0.5)  # Base margin + variance component
+        calibrated_threshold = mean_self_sim - adaptive_margin
         calibrated_threshold = max(settings.THRESHOLD_MIN, min(calibrated_threshold, settings.THRESHOLD_MAX))
 
-        # Fallback for nearly identical embeddings (low variance)
-        if std_self_sim < 0.05:
-            calibrated_threshold = settings.THRESHOLD_LOW_VARIANCE_DEFAULT
+        # For low variance (consistent embeddings), use higher threshold
+        if std_self_sim < 0.03:
+            calibrated_threshold = max(calibrated_threshold, settings.THRESHOLD_LOW_VARIANCE_DEFAULT)
+
+        print(f"Person {new_person.person_id}: self_sim_mean={mean_self_sim:.4f}, std={std_self_sim:.4f}, threshold={calibrated_threshold:.4f}")
 
         new_person.match_threshold = calibrated_threshold
+    else:
+        # Single embedding - use default threshold
+        new_person.match_threshold = settings.THRESHOLD_LOW_VARIANCE_DEFAULT
 
     db.commit()
     db.refresh(new_person)

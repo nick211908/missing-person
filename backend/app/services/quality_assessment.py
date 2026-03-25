@@ -132,13 +132,14 @@ def estimate_pose_angles(img: np.ndarray, detector_backend: str = "retinaface") 
 
 def assess_face_quality(
     img: np.ndarray,
-    blur_threshold: float = 100.0,
-    max_yaw: float = 45.0,
-    max_pitch: float = 30.0,
+    blur_threshold: float = 50.0,
+    max_yaw: float = 60.0,
+    max_pitch: float = 45.0,
     detector_backend: str = "retinaface"
 ) -> QualityResult:
     """
     Assess face quality for embedding extraction.
+    Relaxed thresholds for CCTV conditions.
 
     Args:
         img: BGR image of face region
@@ -161,18 +162,19 @@ def assess_face_quality(
     # Compute blur score
     blur_score = compute_blur_score(img)
 
-    if blur_score < blur_threshold:
+    # More permissive blur check - allow slightly blurry faces for CCTV
+    if blur_score < blur_threshold * 0.5:  # Accept faces at 50% of threshold
         return QualityResult(
             accepted=False,
             quality_score=blur_score / blur_threshold,
             blur_score=blur_score,
-            rejection_reason=f"Image too blurry (score: {blur_score:.1f}, threshold: {blur_threshold})"
+            rejection_reason=f"Image too blurry (score: {blur_score:.1f}, minimum: {blur_threshold * 0.5:.1f})"
         )
 
     # Estimate pose
     yaw, pitch, roll = estimate_pose_angles(img, detector_backend)
 
-    # Check pose constraints
+    # Check pose constraints with wider tolerance
     abs_yaw = abs(yaw)
     abs_pitch = abs(pitch)
 
@@ -196,10 +198,11 @@ def assess_face_quality(
             rejection_reason=f"Pitch angle too extreme ({pitch:.1f}°, max: {max_pitch}°)"
         )
 
-    # Compute overall quality score
+    # Compute overall quality score with weighted formula
+    # Blur is more important than pose for recognition
     blur_factor = min(blur_score / blur_threshold, 1.5)
-    pose_factor = 1.0 - (abs_yaw / 90 + abs_pitch / 60) / 2
-    quality_score = blur_factor * pose_factor
+    pose_factor = 1.0 - (abs_yaw / 120 + abs_pitch / 90) / 2  # More permissive scaling
+    quality_score = (blur_factor * 0.7 + pose_factor * 0.3)  # Weight blur more heavily
 
     return QualityResult(
         accepted=True,

@@ -111,9 +111,11 @@ class Matcher:
     def match(self, query_embedding: np.ndarray, custom_threshold: float | None = None):
         """
         Match a query embedding against all stored embeddings.
-        Returns (best_person_id, max_similarity_score) or (None, 0.0)
-        For persons with multiple embeddings, uses the maximum similarity across all embeddings.
+        Automatically uses KNN or max-similarity based on settings.
         """
+        if settings.USE_KNN_MATCHING:
+            return self.match_knn(query_embedding, k=settings.KNN_NEIGHBORS, custom_threshold=custom_threshold)
+            
         if not self.embeddings:
             return None, 0.0
 
@@ -125,6 +127,11 @@ class Matcher:
 
         # Compare against all embeddings for all persons
         for person_id, person_data in self.embeddings.items():
+            # Validate model consistency
+            db_model = person_data.get('model_name')
+            if db_model and db_model != self.model_name:
+                print(f"WARNING: Model mismatch for person {person_id}. DB: {db_model}, Query: {self.model_name}")
+
             emb_list = person_data.get('embeddings', [])
             # Get max similarity across all embeddings for this person
             person_max_sim = 0.0
@@ -142,7 +149,79 @@ class Matcher:
 
         return None, max_sim
 
-    def match_knn(self, query_embedding: np.ndarray, k: int = 3, custom_threshold: float | None = None):
+    def match_knn(self, query_embedding: np.ndarray, k: int = 5, custom_threshold: float | None = None):
+        """
+        K-nearest neighbors matching with weighted voting.
+        More robust for persons with multiple embeddings.
+        Uses weighted voting where higher similarities count more.
+
+        Args:
+            query_embedding: The embedding to match
+            k: Number of neighbors to consider
+            custom_threshold: Optional threshold override
+
+        Returns:
+            Tuple of (best_person_id, confidence_score) or (None, 0.0)
+        """
+        if not self.embeddings:
+            return None, 0.0
+
+        query = np.array(query_embedding).reshape(1, -1)
+        threshold = custom_threshold if custom_threshold is not None else self.threshold
+
+        # Collect all embeddings with their person_ids
+        all_embeddings = []
+        for person_id, person_data in self.embeddings.items():
+            for emb in person_data.get('embeddings', []):
+                all_embeddings.append((person_id, emb))
+
+        if len(all_embeddings) == 0:
+            return None, 0.0
+
+        # Compute similarities to all embeddings
+        similarities = []
+        for person_id, emb in all_embeddings:
+            sim = cosine_similarity(query, emb)[0][0]
+            similarities.append((person_id, float(sim)))
+
+        # Sort by similarity descending
+        similarities.sort(key=lambda x: x[1], reverse=True)
+
+        # Take top k
+        top_k = similarities[:k]
+
+        # Weighted voting - higher similarities get more weight
+        person_weights: dict = {}
+        person_weighted_sum: dict = {}
+
+        for i, (person_id, sim) in enumerate(top_k):
+            # Weight by similarity and position (top matches count more)
+            position_weight = 1.0 / (i + 1)  # Higher rank = higher weight
+            weight = sim * position_weight
+
+            if person_id not in person_weights:
+                person_weights[person_id] = 0.0
+                person_weighted_sum[person_id] = 0.0
+
+            person_weights[person_id] += weight
+            person_weighted_sum[person_id] += sim * weight
+
+        # Find winner by weighted score
+        best_person_id = None
+        best_weighted_score = 0.0
+        best_avg_sim = 0.0
+
+        for person_id, total_weight in person_weights.items():
+            if total_weight > best_weighted_score:
+                best_person_id = person_id
+                best_weighted_score = total_weight
+                best_avg_sim = person_weighted_sum[person_id] / max(total_weight, 0.001)
+
+        # Check against threshold
+        if best_person_id is not None and float(best_avg_sim) > float(threshold):
+            return best_person_id, best_avg_sim
+
+        return None, best_avg_sim
         """
         K-nearest neighbors matching with voting.
         More robust for persons with multiple embeddings.
