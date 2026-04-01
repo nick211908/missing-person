@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import LiveStream from './components/LiveStream';
 import PhoneCamera from './components/PhoneCamera';
 import VideoAnalysis from './components/VideoAnalysis';
+import QRCodePage from "./pages/QRCodePage";
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 
@@ -21,6 +22,11 @@ function AppInner() {
         <div style={{ color: 'var(--text-secondary)' }}>Loading...</div>
       </div>
     );
+  }
+
+  // Check for QR code page
+  if (window.location.pathname === "/qrcode") {
+    return <QRCodePage />;
   }
 
   if (!user) {

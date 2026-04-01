@@ -1,8 +1,11 @@
-import { Camera, LayoutDashboard, ShieldAlert, LogOut, Shield, User, Film, Smartphone } from 'lucide-react';
+import { Camera, LayoutDashboard, ShieldAlert, LogOut, Shield, User, Film, Smartphone, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useState } from "react";
 
 const Navbar = ({ activeTab, setActiveTab }) => {
+  const [showQR, setShowQR] = useState(false);
+
   const { user, logout } = useAuth();
 
   const tabs = [
@@ -70,7 +73,95 @@ const Navbar = ({ activeTab, setActiveTab }) => {
         ))}
       </div>
 
-      {/* User info + logout */}
+      
+  {/* QR Code Button */}
+  <motion.button
+    whileHover={{ scale: 1.05 }}
+    whileTap={{ scale: 0.95 }}
+    onClick={() => setShowQR(true)}
+    title="QR Code for Phone Connection"
+    style={{
+      background: 'rgba(59,130,246,0.2)',
+      border: '1px solid rgba(59,130,246,0.3)',
+      color: '#3b82f6',
+      padding: '0.6rem',
+      borderRadius: '10px',
+      display: 'flex',
+      cursor: 'pointer',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '0.875rem',
+      fontWeight: 500
+    }}
+  >
+    <QrCode size={18} />
+    Connect Phone
+  </motion.button>
+  
+  {/* QR Code Modal */}
+  {showQR && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.8)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      <div
+        className="glass-panel"
+        style={{
+          maxWidth: '500px',
+          padding: '2rem',
+          position: 'relative'
+        }}
+      >
+        <button
+          onClick={() => setShowQR(false)}
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            right: '1rem',
+            background: 'var(--danger)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          ✕
+        </button>
+        
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ marginBottom: '1rem' }}>Connect Your Phone</h2>
+          <p>to use on mobile please scan this Qr code to connect</p>
+          <a href="/qrcode" target="_blank" style={{
+            display: 'inline-block',
+            marginTop: '1rem',
+            padding: '0.75rem 1.5rem',
+            background: 'var(--accent-primary)',
+            color: 'white',
+            borderRadius: '8px',
+            textDecoration: 'none'
+          }}>
+            Open QR Code in New Tab
+          </a>
+        </div>
+      </div>
+    </motion.div>
+  )}
+
+{/* User info + logout */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <div style={{
           display: 'flex',

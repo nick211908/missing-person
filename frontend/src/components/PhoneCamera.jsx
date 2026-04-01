@@ -14,6 +14,7 @@ const PhoneCamera = () => {
   const [cameraId, setCameraId] = useState(`phone-${Math.random().toString(36).substr(2, 9)}`);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+const [isProcessing, setIsProcessing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected'); // disconnected, connecting, connected, error
 
   // Device info
@@ -232,7 +233,8 @@ const PhoneCamera = () => {
   // Start streaming
   const startStreaming = async () => {
     try {
-      await startCamera();
+      setIsProcessing(true);
+    await startCamera();
       const wsUrl = await startSession();
       connectWebSocket(wsUrl);
     } catch (err) {
@@ -243,6 +245,7 @@ const PhoneCamera = () => {
   // Stop streaming
   const stopStreaming = async () => {
     setIsStreaming(false);
+    setIsProcessing(false);
 
     if (sessionId) {
       try {

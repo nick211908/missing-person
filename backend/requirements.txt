@@ -1,4 +1,4 @@
-opencv-python-headless
+opencv-python-headless 
 deepface
 numpy<2.0
 scikit-learn
@@ -15,3 +15,6 @@ python-dotenv
 supervision
 albumentations
 passlib[bcrypt]
+zeroconf==0.132.0
+qrcode==7.4.2
+psutil==5.9.8

@@ -12,11 +12,6 @@ from app.services.phone_camera_service import phone_camera_service
 import app.models.user  # noqa: F401 — ensures users table is created by init_db
 
 
-
-network_discovery_service = NetworkDiscoveryService(app_host="0.0.0.0", app_port=8000)
-
-
-
 async def cleanup_stale_sessions():
     """Background task to clean up stale phone camera sessions."""
     while True:
@@ -34,21 +29,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("Starting background tasks...")
-    # Start network discovery service for Bluetooth/WiFi
-    try:
-        network_discovery_service.start_service_advertisement()
-        print("✓ Network discovery service started")
-    except Exception as e:
-        print(f"Warning: Could not start network discovery: {e}")
     cleanup_task = asyncio.create_task(cleanup_stale_sessions())
     yield
     # Shutdown
-    print("Shutting down network discovery service...")
-    try:
-        network_discovery_service.stop_service_advertisement()
-        print("✓ Network discovery service stopped")
-    except Exception as e:
-        print(f"Warning: Error stopping network discovery: {e}")
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -86,7 +69,6 @@ app.include_router(routes_missing.router, tags=["Missing Persons"])
 app.include_router(routes_stream.router, tags=["Stream Processing"])
 app.include_router(routes_detection.router, tags=["Detections"])
 app.include_router(routes_phone_camera.router, tags=["Phone Camera"])
-app.include_router(routes_network.router, tags=["Network Discovery", "Bluetooth", "WiFi"])
 
 if __name__ == "__main__":
     import uvicorn
